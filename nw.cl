@@ -142,7 +142,7 @@ needleman_byblockworker(__global __read_only char* seq1,
         // load to local buffer
         if( lx == 0 || ly == 0 ){
             printf("initial: iter:%u, lx:%u, ly:%u\n", iter, lx, ly);
-            buffer[to1D(buf_w, lx, ly)] = table[to1D(w, x+lx-edge, y+ly-edge)];
+            buffer[to1D(buf_w, lx, ly)] = table[to1D(w, x-edge, y-edge)];
         }
         barrier(CLK_LOCAL_MEM_FENCE);
         
@@ -164,8 +164,8 @@ needleman_byblockworker(__global __read_only char* seq1,
         }
         barrier(CLK_LOCAL_MEM_FENCE);
         
-        if( lx > 0 || ly > 0 ){
-            table[to1D(w, x+lx-edge, y+ly-edge)] = buffer[to1D(buf_w, lx, ly)];
+        if( lx > 0 && ly > 0 ){
+            table[to1D(w, x-edge, y-edge)] = buffer[to1D(buf_w, lx, ly)];
         }
 
     }
