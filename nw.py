@@ -124,7 +124,7 @@ if __name__ == '__main__':
     cl.enqueue_copy(queue, gpu_seq2_buff, seq2, is_blocking=False)
     queue.finish()
     
-    local_size = (3, 4)
+    local_size = (3, 5)
     #global_size = (len1, len2)
     global_size = tuple([round_up(g, l) for g, l in zip((len1, len2), local_size)])
     print global_size
@@ -171,6 +171,7 @@ if __name__ == '__main__':
             cl.enqueue_copy(queue, host_table, dptable, is_blocking=True)
             print host_table.reshape([len2,len1])
         print ""
+        #break
     # Show final result
     cl.enqueue_copy(queue, host_table, dptable, is_blocking=True)
     
