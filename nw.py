@@ -28,7 +28,13 @@ def edit_distance(strA, strB):
     else:
         return max(lenA, lenB)
 
-
+def round_up(global_size, group_size):
+    r = global_size % group_size
+    if r == 0:
+        return global_size
+    return global_size + group_size - r
+        
+        
 if __name__ == '__main__':
     # List our platforms
     platforms = cl.get_platforms()
@@ -95,10 +101,10 @@ if __name__ == '__main__':
                 # CGCGGAACGCTACATAGGCGGGACGCCGCAGAGCGCGGCTTCCACGACGGGGCGCGAACC \
                 # ATTTTGCATAGGATTGAGAGCCCGGCGAGCCCTTGAGCACGACCCCCCATGGACCCATCG \
                 # TCTGGTCAGGTGGGCAAACCGACCGATCCACGGAGGGAAG"
-    string1 = "CCTTGCTACGCACGGGCACGGAGCGCAGCCCCAGCCACCCCTAATCACACA"
-    string2 = "CCGGCCCCGGAACGGTTTGCACCTGGGAATCAGCGCCGCCTCGGCCGATAA"
-    #string1 = "CCTGGCTAC"
-    #string2 = "CCGGCCTAAC"
+    #string1 = "CCTTGCTACGCACGGGCACGGAGCGCAGCCCCAGCCACCCCTAATCACACA"
+    #string2 = "CCGGCCCCGGAACGGTTTGCACCTGGGAATCAGCGCCGCCTCGGCCGATAA"
+    string1 = "CCTGGCTAC"
+    string2 = "CCGGCCTAAC"
     seq1 = np.fromstring(string1, dtype='|S1')
     seq2 = np.fromstring(string2, dtype='|S1')
     
@@ -118,11 +124,9 @@ if __name__ == '__main__':
     cl.enqueue_copy(queue, gpu_seq2_buff, seq2, is_blocking=False)
     queue.finish()
     
-    if len1 < len2:
-        local_size = (len1, 1)  # ?? per work group
-    else:
-        local_size = (1, len2)
-    global_size = (len1, len2)
+    local_size = (3, 4)
+    #global_size = (len1, len2)
+    global_size = tuple([round_up(g, l) for g, l in zip((len1, len2), local_size)])
     print global_size
     print local_size
     width = np.int32(len1)
@@ -131,7 +135,7 @@ if __name__ == '__main__':
     
     # Create a local memory per working group that is
     # the size of an int (4 bytes) * (N+2) * (N+2), where N is the local_size
-    buf_size = (np.int32(8 + edge), np.int32(12 + edge))
+    buf_size = (np.int32(local_size[0] + edge), np.int32(local_size[1] + edge))
     gpu_local_memory = cl.LocalMemory(4 * buf_size[0] * buf_size[1])
 
     # initialize labels
@@ -139,8 +143,9 @@ if __name__ == '__main__':
                              dptable, width, height)
 
     # while not done, propagate labels
-    itercount = np.int32(math.ceil((len1-1.0)/(buf_size[0]-1.0)) + math.ceil((len2-1.0)/(buf_size[1]-1.0)))
-    show_progress = False
+    #itercount = np.int32(math.ceil((len1-1.0)/(buf_size[0]-1.0)) + math.ceil((len2-1.0)/(buf_size[1]-1.0)))
+    itercount = np.int32(global_size[0]/local_size[0] + global_size[1]/local_size[1])
+    show_progress = True
 
     # Show the initial labels
     cl.enqueue_copy(queue, host_table, dptable, is_blocking=True)
@@ -151,14 +156,14 @@ if __name__ == '__main__':
     for itr in xrange(itercount):
         #host_done_flag[0] = 0
         #cl.enqueue_copy(queue, gpu_done_flag, host_done_flag, is_blocking=False)
-        prop_exec = program.needleman_byblock(queue, global_size, local_size,
-                                              gpu_seq1_buff, gpu_seq2_buff,
-                                              dptable,
-                                              gpu_local_memory,
-                                              np.int32(itr),
-                                              width, height,
-                                              buf_size[0], buf_size[1],
-                                              edge)
+        prop_exec = program.needleman_byblockworker(queue, global_size, local_size,
+                                                    gpu_seq1_buff, gpu_seq2_buff,
+                                                    dptable,
+                                                    gpu_local_memory,
+                                                    np.int32(itr),
+                                                    width, height,
+                                                    buf_size[0], buf_size[1],
+                                                    edge)
         prop_exec.wait()
         elapsed = 1e-6 * (prop_exec.profile.end - prop_exec.profile.start)
         total_time += elapsed
