@@ -65,7 +65,7 @@ if __name__ == '__main__':
                             properties=cl.command_queue_properties.PROFILING_ENABLE)
     print 'The queue is using the device:', queue.device.name
 
-    program = cl.Program(context, open('nw.cl').read()).build(options='')
+    program = cl.Program(context, open('nw_co.cl').read()).build(options='')
 
     # string1 = "CAGCATATACGCGCTCGCCCGCCGCCGCTGGCTCGCTAAGGGTACGCTTGCCTGAGCCTC \
                 # TGCCAATGTCGCCTGTTCATTGGGAAGGCGGAGGTAACGTGCGCAGTCCGCGTAGCTGCC \
@@ -113,36 +113,36 @@ if __name__ == '__main__':
     len1 = len(seq1)
     len2 = len(seq2)
     
-    host_table = np.zeros( (len1+1)*(len2+1), dtype=np.uint32)
-    #print host_table.reshape([len2,len1])
     gpu_seq1_buff = cl.Buffer(context, cl.mem_flags.READ_ONLY, len1)
     gpu_seq2_buff = cl.Buffer(context, cl.mem_flags.READ_ONLY, len2)
-    dptable = cl.Buffer(context, cl.mem_flags.READ_WRITE, host_table.size *4)
-    #gpu_done_flag = cl.Buffer(context, cl.mem_flags.READ_WRITE, 4)
     
-
     # Send to the device, non-blocking
     cl.enqueue_copy(queue, gpu_seq1_buff, seq1, is_blocking=False)
     cl.enqueue_copy(queue, gpu_seq2_buff, seq2, is_blocking=False)
     queue.finish()
     
-    local_size = (14, 20)
-    #global_size = (len1, len2)
+    local_size = (31, 31)
     global_size = tuple([round_up(g, l) for g, l in zip((len1, len2), local_size)])
     print global_size
     print local_size
+    
+    row_table = np.zeros( (len1+1)*(global_size[1]/local_size[1]+1), dtype=np.uint32)
+    col_table = np.zeros( (global_size[0]/local_size[0]+1)*(len2+1), dtype=np.uint32)
+    row_dptable = cl.Buffer(context, cl.mem_flags.READ_WRITE, row_table.size *4)
+    col_dptable = cl.Buffer(context, cl.mem_flags.READ_WRITE, col_table.size *4)
+    
     width = np.int32(len1+1)
     height = np.int32(len2+1)
     edge = np.int32(1)
     
     # Create a local memory per working group that is
-    # the size of an int (4 bytes) * (N+2) * (N+2), where N is the local_size
+    # the size of an int (4 bytes) * (M+1) * (N+1), where M,N are the local_size{0] and [1]
     buf_size = (np.int32(local_size[0] + edge), np.int32(local_size[1] + edge))
     gpu_local_memory = cl.LocalMemory(4 * buf_size[0] * buf_size[1])
 
     # initialize labels
     program.initialize_table(queue, global_size, local_size,
-                             dptable, width, height)
+                             row_dptable, col_dptable, width, height)
 
     # while not done, propagate labels
     #itercount = np.int32(math.ceil((len1-1.0)/(buf_size[0]-1.0)) + math.ceil((len2-1.0)/(buf_size[1]-1.0)))
@@ -150,42 +150,61 @@ if __name__ == '__main__':
     show_progress = False
 
     # Show the initial labels
-    cl.enqueue_copy(queue, host_table, dptable, is_blocking=True)
-    print "Initialization"
-    print host_table.reshape([len2+1,len1+1])
+    cl.enqueue_copy(queue, row_table, row_dptable, is_blocking=True)
+    cl.enqueue_copy(queue, col_table, col_dptable, is_blocking=True)
+    # print "Initialization"
+    # print row_table.reshape([-1,len1+1])
+    # print col_table.reshape([-1,len2+1])
     
     total_time = 0
 
     for itr in xrange(itercount):
         #host_done_flag[0] = 0
         #cl.enqueue_copy(queue, gpu_done_flag, host_done_flag, is_blocking=False)
-        prop_exec = program.needleman_byblockworker(queue, global_size, local_size,
-                                                    gpu_seq1_buff, gpu_seq2_buff,
-                                                    dptable,
-                                                    gpu_local_memory,
-                                                    np.int32(itr),
-                                                    width, height,
-                                                    buf_size[0], buf_size[1],
-                                                    edge)
+        prop_exec = program.needleman_coalesce(queue, global_size, local_size,
+                                               gpu_seq1_buff, gpu_seq2_buff,
+                                               row_dptable,
+                                               col_dptable,
+                                               gpu_local_memory,
+                                               np.int32(itr),
+                                               width, height,
+                                               buf_size[0], buf_size[1],
+                                               edge )
         prop_exec.wait()
         elapsed = 1e-6 * (prop_exec.profile.end - prop_exec.profile.start)
         total_time += elapsed
         if show_progress:
-            cl.enqueue_copy(queue, host_table, dptable, is_blocking=True)
-            print host_table.reshape([len2+1,len1+1])
-            print ""
+            print "itr"
+            cl.enqueue_copy(queue, row_table, row_dptable, is_blocking=True)
+            cl.enqueue_copy(queue, col_table, col_dptable, is_blocking=True)
+            print row_table.reshape([-1,len1+1])
+            print col_table.reshape([-1,len2+1])
+
         #break
     # Show final result
-    cl.enqueue_copy(queue, host_table, dptable, is_blocking=True)
+    cl.enqueue_copy(queue, row_table, row_dptable, is_blocking=True)
+    cl.enqueue_copy(queue, col_table, col_dptable, is_blocking=True)
     
-    print "Parallel result:"
-    print host_table.reshape([len2+1,len1+1])
+    printresult = False
+    
+    row_table = row_table.reshape([-1,len1+1])
+    col_table = col_table.reshape([-1,len2+1])
+    if printresult:
+        print "Parallel result:"
+        print "row"
+        print row_table
+        print "column"
+        print col_table
+
     s_time = time.time()
     serial = edit_distance(string1, string2)
-    print "Serial result:"
-    print serial
     s_time = time.time() - s_time
-    assert (host_table.reshape([len2+1,len1+1]) == serial).all()
+    if printresult:
+        print "Serial result:"
+        print serial
+        
+    assert (row_table[-1,:] == serial[-1,:]).all()
+    assert (col_table[-1,:].T == serial[:,-1]).all()
     print('Parallel time: {}'.format(total_time) )
     print('Serial time: {}'.format(s_time) )
     

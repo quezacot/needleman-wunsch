@@ -16,16 +16,17 @@ __kernel void
 initialize_table(__global unsigned int *table,
                  int w, int h )
 {
-    const unsigned int x = get_global_id(0);
-    const unsigned int y = get_global_id(1);
-    
+    const unsigned int x = get_global_id(0)+1;
+    const unsigned int y = get_global_id(1)+1;
     if( x<w && y<h ){
-        if( x == 0 ){
+        if( x == 1 ){
             table[to1D(w,0,y)] = y;
-        } else if( y == 0 ){
+        }
+        if( y == 1 ){
             table[to1D(w,x,0)] = x;
-        } else{
-            table[to1D(w,x,y)] = 0;
+        }
+        if( x == 1 && y == 1 ){
+            table[to1D(w,0,0)] = 0;
         }
     }
 }
@@ -123,8 +124,8 @@ needleman_byblockworker(__global __read_only char* seq1,
                         int edge)
 {
      // Global position of output pixel
-    const unsigned int x = get_global_id(0);
-    const unsigned int y = get_global_id(1);
+    const unsigned int x = get_global_id(0)+edge;
+    const unsigned int y = get_global_id(1)+edge;
     
     // Local position relative to (0, 0) in workgroup
     const unsigned int lx = get_local_id(0)+edge;
@@ -137,45 +138,50 @@ needleman_byblockworker(__global __read_only char* seq1,
     // Load the relevant labels to a local buffer with a halo
     if( x < w && y < h && wx + wy == iter ){
     //if( x > 0 && y > 0 && x < w && y < h && x%(buf_w-edge) == 1 && y%(buf_h-edge) == 1 && wx + wy == iter ){
-        printf("iter:%u, x:%u, y:%u\n", iter, x, y);
-        printf("iter:%u, wx:%u, wy:%u\n", iter, wx, wy);
+        //printf("iter:%u, x:%u, y:%u\n", iter, x, y);
+        //printf("iter:%u, wx:%u, wy:%u\n", iter, wx, wy);
         // load to local buffer
         
         if( lx == edge ){
-            //printf("iter:%u, x:%u, y:%u\n", iter, x, y+edge);
-            //printf("initial: iter:%u, lx:%u, ly:%u\n", iter, lx, ly);
-            buffer[to1D(buf_w, 0, ly)] = table[to1D(w, x, y+edge)];
+            //if (wx==1 && wy==0) printf("iter:%u, x:%u, y:%u\n", iter, x, y+edge);
+            
+            buffer[to1D(buf_w, 0, ly)] = table[to1D(w, x-edge, y)];
+            //if (wx==1 && wy==0) printf("initial: iter:%u, x:%u, y:%u, lx:%u, ly:%u value:%d\n", iter, x-edge, y, lx, ly, buffer[to1D(buf_w, 0, ly)]);
         }
         if( ly == edge ){
-            //printf("iter:%u, x:%u, y:%u\n", iter, x+edge, y);
-            //printf("initial: iter:%u, lx:%u, ly:%u\n", iter, lx, ly);
-            buffer[to1D(buf_w, lx, 0)] = table[to1D(w, x+edge, y)];
+            //if (wx==1 && wy==0) printf("iter:%u, x:%u, y:%u\n", iter, x+edge, y);
+            
+            buffer[to1D(buf_w, lx, 0)] = table[to1D(w, x, y-edge)];
+            //if (wx==1 && wy==0) printf("initial: iter:%u, x:%u, y:%u, lx:%u, ly:%u, value:%d\n", iter, x, y-edge, lx, ly, buffer[to1D(buf_w, lx, 0)]);
         }
-        if( lx == buf_w-1 && ly == buf_h-1 ){
-            //printf("iter:%u, x:%u, y:%u\n", iter, x+edge-(buf_w-edge), y+edge-(buf_h-edge));
-            //printf("initial: iter:%u, lx:%u, ly:%u\n", iter, lx, ly);
-            buffer[to1D(buf_w, 0, 0)] = table[to1D(w, x+edge-(buf_w-edge), y+edge-(buf_h-edge))];
+        if( lx == edge && ly == edge ){
+            //if (wx==1 && wy==0) printf("iter:%u, x:%u, y:%u\n", iter, x+edge-(buf_w-edge), y+edge-(buf_h-edge));
+            
+            buffer[to1D(buf_w, 0, 0)] = table[to1D(w, x-edge, y-edge)];
+            //if (wx==1 && wy==0) printf("initial: iter:%u, x:%u, y:%u, lx:%u, ly:%u, value:%d\n", iter, x-(buf_w-edge), y-(buf_h-edge), lx, ly, buffer[to1D(buf_w, 0, 0)]);
         }
-        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+    barrier(CLK_LOCAL_MEM_FENCE);
         
-        for( int i=2; i < buf_w + buf_h - 1; ++i ){
-            if( lx + ly == i ){
-                //printf("fill %d: iter:%u, lx:%u, ly:%u\n", i, iter, lx, ly);
-                int cur;
-                if( seq1[x] == seq2[y] ){
-                    cur = buffer[to1D(buf_w, lx-1, ly-1)];
-                } else{
-                    cur = buffer[to1D(buf_w, lx-1, ly-1)] + 1;
-                }
-                buffer[to1D(buf_w, lx, ly)] = min( buffer[to1D(buf_w, lx-1, ly)]+1, buffer[to1D(buf_w, lx, ly-1)]+1 );
-                buffer[to1D(buf_w, lx, ly)] = min( buffer[to1D(buf_w, lx, ly)], cur );
+    for( int i=2; i < buf_w + buf_h - 1; ++i ){
+        if( x < w && y < h && wx + wy == iter && lx + ly == i ){
+            //printf("fill %d: iter:%u, lx:%u, ly:%u\n", i, iter, lx, ly);
+            int cur;
+            if( seq1[x-1] == seq2[y-1] ){
+                cur = buffer[to1D(buf_w, lx-1, ly-1)];
+            } else{
+                cur = buffer[to1D(buf_w, lx-1, ly-1)] + 1;
             }
-            barrier(CLK_LOCAL_MEM_FENCE);
+            buffer[to1D(buf_w, lx, ly)] = min( buffer[to1D(buf_w, lx-1, ly)]+1, buffer[to1D(buf_w, lx, ly-1)]+1 );
+            buffer[to1D(buf_w, lx, ly)] = min( buffer[to1D(buf_w, lx, ly)], cur );
         }
-        
-        table[to1D(w, x+edge, y+edge)] = buffer[to1D(buf_w, lx, ly)];
         barrier(CLK_LOCAL_MEM_FENCE);
     }
+    
+    if( x < w && y < h && wx + wy == iter ){
+        table[to1D(w, x, y)] = buffer[to1D(buf_w, lx, ly)];
+    }
+    barrier(CLK_LOCAL_MEM_FENCE);
 
     // Make sure all threads reach the next part after
     // the local buffer is loaded
