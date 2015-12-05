@@ -101,17 +101,19 @@ if __name__ == '__main__':
                 # CGCGGAACGCTACATAGGCGGGACGCCGCAGAGCGCGGCTTCCACGACGGGGCGCGAACC \
                 # ATTTTGCATAGGATTGAGAGCCCGGCGAGCCCTTGAGCACGACCCCCCATGGACCCATCG \
                 # TCTGGTCAGGTGGGCAAACCGACCGATCCACGGAGGGAAG"
-    #string1 = "CCTTGCTACGCACGGGCACGGAGCGCAGCCCCAGCCACCCCTAATCACACA"
-    #string2 = "CCGGCCCCGGAACGGTTTGCACCTGGGAATCAGCGCCGCCTCGGCCGATAA"
-    string1 = "CCTGGCTAC"
-    string2 = "CCGGCCTAAC"
+    string1 = "CCTTGCTACGCACGGGCACGGAGCGCAGCCCCAGCCACCCCTAATCACACACCTTGCTACGCACGGGCACGGAGCGCAGCCCCAGCCACCCCTAATCACACACCTTGCTACGCACGGGCACGGAGCGCAGCCCCAGCCACCCCTAATCACACA"
+    string2 = "CCGGCCCCGGAACGGTTTGCACCTGGGAATCAGCGCCGCCTCGGCCGATAACCTTGCTACGCACGGGCACGGAGCGCAGCCCCAGCCACCCCTAATCACACACCTTGCTACGCACGGGCACGGAGCGCAGCCCCAGCCACCCCTAATCACACA"
+    #string1 = "CCTGGCTAC"
+    #string2 = "CCGGCCTAAC"
+    #string1 = "CCTG"
+    #string2 = "CCGGCC"
     seq1 = np.fromstring(string1, dtype='|S1')
     seq2 = np.fromstring(string2, dtype='|S1')
     
-    len1 = len(seq1)+1
-    len2 = len(seq2)+1
+    len1 = len(seq1)
+    len2 = len(seq2)
     
-    host_table = np.zeros(len1*len2, dtype=np.uint32)
+    host_table = np.zeros( (len1+1)*(len2+1), dtype=np.uint32)
     #print host_table.reshape([len2,len1])
     gpu_seq1_buff = cl.Buffer(context, cl.mem_flags.READ_ONLY, len1)
     gpu_seq2_buff = cl.Buffer(context, cl.mem_flags.READ_ONLY, len2)
@@ -124,13 +126,13 @@ if __name__ == '__main__':
     cl.enqueue_copy(queue, gpu_seq2_buff, seq2, is_blocking=False)
     queue.finish()
     
-    local_size = (3, 5)
+    local_size = (14, 20)
     #global_size = (len1, len2)
     global_size = tuple([round_up(g, l) for g, l in zip((len1, len2), local_size)])
     print global_size
     print local_size
-    width = np.int32(len1)
-    height = np.int32(len2)
+    width = np.int32(len1+1)
+    height = np.int32(len2+1)
     edge = np.int32(1)
     
     # Create a local memory per working group that is
@@ -145,11 +147,12 @@ if __name__ == '__main__':
     # while not done, propagate labels
     #itercount = np.int32(math.ceil((len1-1.0)/(buf_size[0]-1.0)) + math.ceil((len2-1.0)/(buf_size[1]-1.0)))
     itercount = np.int32(global_size[0]/local_size[0] + global_size[1]/local_size[1])
-    show_progress = True
+    show_progress = False
 
     # Show the initial labels
     cl.enqueue_copy(queue, host_table, dptable, is_blocking=True)
-    #print host_table.reshape([len2,len1])
+    print "Initialization"
+    print host_table.reshape([len2+1,len1+1])
     
     total_time = 0
 
@@ -169,20 +172,20 @@ if __name__ == '__main__':
         total_time += elapsed
         if show_progress:
             cl.enqueue_copy(queue, host_table, dptable, is_blocking=True)
-            print host_table.reshape([len2,len1])
-        print ""
+            print host_table.reshape([len2+1,len1+1])
+            print ""
         #break
     # Show final result
     cl.enqueue_copy(queue, host_table, dptable, is_blocking=True)
     
     print "Parallel result:"
-    print host_table.reshape([len2,len1])
+    print host_table.reshape([len2+1,len1+1])
     s_time = time.time()
     serial = edit_distance(string1, string2)
     print "Serial result:"
     print serial
     s_time = time.time() - s_time
-    assert (host_table.reshape([len2,len1]) == serial).all()
+    assert (host_table.reshape([len2+1,len1+1]) == serial).all()
     print('Parallel time: {}'.format(total_time) )
     print('Serial time: {}'.format(s_time) )
     
