@@ -28,21 +28,21 @@ def edit_distance(strA, strB, backtrace=False):
             backtrace = [] 
             while n > 0 or m > 0:
                 minval = dp[n, m]
-                prev = np.argmin((dp[n-1,m-1], dp[n-1,m], dp[n,m-1])) + 1
-                if prev == 1:
-                    # match or replacement
+                prev = np.argmin((dp[n-1,m-1], dp[n-1,m], dp[n,m-1]))
+                if prev == 0:
+                    # match or substitution
                     alignedA.append(strA[n-1])
                     alignedB.append(strB[m-1])
                     backtrace.append('M' if dp[n-1,m-1] == dp[n,m] else 'S')
                     m -= 1
                     n -= 1
-                elif prev == 2:
+                elif prev == 1:
                     # deletion
                     alignedA.append(strA[n-1])
                     alignedB.append('-')
                     backtrace.append('D')
                     n -= 1
-                else:
+                elif prev == 2:
                     # insertion
                     alignedA.append('-')
                     alignedB.append(strB[m-1])
@@ -53,8 +53,8 @@ def edit_distance(strA, strB, backtrace=False):
 if __name__ == '__main__':
     strA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
     strB = 'CDEFGHIJKLOMNPQRSTUVWXYZCB'
-    print 'A:', strA
-    print 'B:', strB
+    print 'Seq A    :', strA
+    print 'Seq B    :', strB
     res = edit_distance(strA, strB, True)
     print 'Aligned A:', res[1]
     print 'Aligned B:', res[2]
