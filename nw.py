@@ -158,7 +158,7 @@ if __name__ == '__main__':
     #print host_table.reshape([len2+1,len1+1])
     
     total_time = 0
-    needleman = 1
+    needleman = 2
     if needleman == 1:
         itercount = np.int32(global_size[0] + global_size[1] + 2)
     

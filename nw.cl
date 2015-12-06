@@ -68,10 +68,18 @@ needleman_byblock(__global __read_only char* seq1,
                   int edge)
 {
      // Global position of output pixel
-    const unsigned int x = get_global_id(0);
-    const unsigned int y = get_global_id(1);
-    // Load the relevant labels to a local buffer with a halo
-    if ( x > 0 && y > 0 && x%(buf_w-edge) == 1 && y%(buf_h-edge) == 1 && x/(buf_w-edge) + y/(buf_h-edge) == iter ) {
+    const unsigned int x = get_global_id(0)+edge;
+    const unsigned int y = get_global_id(1)+edge;
+    
+    // Local position relative to (0, 0) in workgroup
+    const unsigned int lx = get_local_id(0)+edge;
+    const unsigned int ly = get_local_id(1)+edge;
+    
+    // Workgroup ID to (0, 0) in workgroup
+    const unsigned int wx = get_group_id(0);
+    const unsigned int wy = get_group_id(1);
+
+    if ( x < w && y < h && lx == edge && ly == edge && wx + wy == iter ) {
         // printf("iter:%u, x:%u, y:%u\n", iter, x, y);
         // load to local buffer
         for( int i=0; i<buf_w && x+i-edge<w; ++i ){
