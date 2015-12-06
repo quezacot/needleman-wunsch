@@ -56,7 +56,7 @@ if __name__ == '__main__':
 
     # Create a context with all the devices
     devices = platforms[0].get_devices()
-    context = cl.Context(devices)
+    context = cl.Context(devices[2:])
     print 'This context is associated with ', len(context.devices), 'devices'
 
     # Create a queue for transferring data and launching computations.
@@ -114,7 +114,7 @@ if __name__ == '__main__':
     
     len1 = len(seq1)
     len2 = len(seq2)
-    print('Sequence lenth: {}, {} '.format(len1, len2) )
+    print('Sequence length: {}, {} '.format(len1, len2) )
     
     gpu_seq1_buff = cl.Buffer(context, cl.mem_flags.READ_ONLY, len1)
     gpu_seq2_buff = cl.Buffer(context, cl.mem_flags.READ_ONLY, len2)
@@ -124,7 +124,7 @@ if __name__ == '__main__':
     cl.enqueue_copy(queue, gpu_seq2_buff, seq2, is_blocking=False)
     queue.finish()
     
-    local_size = (31, 31)
+    local_size = (64, 16)
     global_size = tuple([round_up(g, l) for g, l in zip((len1, len2), local_size)])
     print global_size
     print local_size

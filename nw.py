@@ -56,7 +56,7 @@ if __name__ == '__main__':
 
     # Create a context with all the devices
     devices = platforms[0].get_devices()
-    context = cl.Context(devices)
+    context = cl.Context(devices[2:])
     print 'This context is associated with ', len(context.devices), 'devices'
 
     # Create a queue for transferring data and launching computations.
@@ -114,7 +114,7 @@ if __name__ == '__main__':
     
     len1 = len(seq1)
     len2 = len(seq2)
-    print('Sequence lenth: {}, {} '.format(len1, len2) )
+    print('Sequence length: {}, {} '.format(len1, len2) )
     
     host_table = np.zeros( (len1+1)*(len2+1), dtype=np.uint32)
     #print host_table.reshape([len2,len1])
@@ -158,7 +158,7 @@ if __name__ == '__main__':
     #print host_table.reshape([len2+1,len1+1])
     
     total_time = 0
-    needleman = 2
+    needleman = 3
     if needleman == 1:
         itercount = np.int32(global_size[0] + global_size[1] + 2)
     
