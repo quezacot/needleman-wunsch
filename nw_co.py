@@ -199,13 +199,15 @@ if __name__ == '__main__':
     s_time = time.time()
     serial = edit_distance(string1, string2)
     s_time = time.time() - s_time
+    s_time *= 1e3
     if printresult:
         print "Serial result:"
         print serial
         
     assert (row_table[-1,:] == serial[-1,:]).all()
     assert (col_table[-1,:].T == serial[:,-1]).all()
-    print('Parallel time: {}'.format(total_time) )
-    print('Serial time: {}'.format(s_time) )
+    print('Parallel time: {} ms'.format(total_time) )
+    print('Serial time: {} ms'.format(s_time) )
+    print('Speed Ratio: {}'.format(s_time/total_time))
     
 

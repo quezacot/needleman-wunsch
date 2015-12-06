@@ -126,7 +126,7 @@ if __name__ == '__main__':
     cl.enqueue_copy(queue, gpu_seq2_buff, seq2, is_blocking=False)
     queue.finish()
     
-    local_size = (14, 20)
+    local_size = (16, 16)
     #global_size = (len1, len2)
     global_size = tuple([round_up(g, l) for g, l in zip((len1, len2), local_size)])
     print global_size
@@ -151,22 +151,42 @@ if __name__ == '__main__':
 
     # Show the initial labels
     cl.enqueue_copy(queue, host_table, dptable, is_blocking=True)
-    print "Initialization"
-    print host_table.reshape([len2+1,len1+1])
+    #print "Initialization"
+    #print host_table.reshape([len2+1,len1+1])
     
     total_time = 0
-
+    needleman = 1
+    if needleman == 1:
+        itercount = np.int32(global_size[0] + global_size[1] + 2)
+    
     for itr in xrange(itercount):
         #host_done_flag[0] = 0
         #cl.enqueue_copy(queue, gpu_done_flag, host_done_flag, is_blocking=False)
-        prop_exec = program.needleman_byblockworker(queue, global_size, local_size,
-                                                    gpu_seq1_buff, gpu_seq2_buff,
-                                                    dptable,
-                                                    gpu_local_memory,
-                                                    np.int32(itr),
-                                                    width, height,
-                                                    buf_size[0], buf_size[1],
-                                                    edge)
+        if needleman == 1:
+            prop_exec = program.needleman_by1(queue, global_size, local_size,
+                                              gpu_seq1_buff, gpu_seq2_buff,
+                                              dptable,
+                                              np.int32(itr),
+                                              width, height)
+        elif needleman == 2:
+            prop_exec = program.needleman_byblock(queue, global_size, local_size,
+                                                  gpu_seq1_buff, gpu_seq2_buff,
+                                                  dptable,
+                                                  gpu_local_memory,
+                                                  np.int32(itr),
+                                                  width, height,
+                                                  buf_size[0], buf_size[1],
+                                                  edge)
+        else:
+            prop_exec = program.needleman_byblockworker(queue, global_size, local_size,
+                                                        gpu_seq1_buff, gpu_seq2_buff,
+                                                        dptable,
+                                                        gpu_local_memory,
+                                                        np.int32(itr),
+                                                        width, height,
+                                                        buf_size[0], buf_size[1],
+                                                        edge)
+
         prop_exec.wait()
         elapsed = 1e-6 * (prop_exec.profile.end - prop_exec.profile.start)
         total_time += elapsed
@@ -178,15 +198,24 @@ if __name__ == '__main__':
     # Show final result
     cl.enqueue_copy(queue, host_table, dptable, is_blocking=True)
     
-    print "Parallel result:"
-    print host_table.reshape([len2+1,len1+1])
+    printresult = False
+    
+    if printresult:
+        print "Parallel result:"
+        print host_table.reshape([len2+1,len1+1])
+        
     s_time = time.time()
     serial = edit_distance(string1, string2)
-    print "Serial result:"
-    print serial
+    
+    if printresult:
+        print "Serial result:"
+        print serial
+        
     s_time = time.time() - s_time
+    s_time *= 1e3
     assert (host_table.reshape([len2+1,len1+1]) == serial).all()
-    print('Parallel time: {}'.format(total_time) )
-    print('Serial time: {}'.format(s_time) )
+    print('Parallel time: {} ms'.format(total_time) )
+    print('Serial time: {} ms'.format(s_time) )
+    print('Speed Ratio: {}'.format(s_time/total_time))
     
 
