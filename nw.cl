@@ -115,6 +115,7 @@ needleman_byblock(__global __read_only char* seq1,
         }
 
     }
+    barrier(CLK_LOCAL_MEM_FENCE);
 
     // Make sure all threads reach the next part after
     // the local buffer is loaded

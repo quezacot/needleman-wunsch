@@ -56,7 +56,8 @@ if __name__ == '__main__':
 
     # Create a context with all the devices
     devices = platforms[0].get_devices()
-    context = cl.Context(devices[2:])
+    context = cl.Context(devices)
+    #context = cl.Context(devices[2:])
     print 'This context is associated with ', len(context.devices), 'devices'
 
     # Create a queue for transferring data and launching computations.
@@ -129,7 +130,7 @@ if __name__ == '__main__':
     cl.enqueue_copy(queue, gpu_seq2_buff, seq2, is_blocking=False)
     queue.finish()
     
-    local_size = (32, 32)
+    local_size = (31, 31)
     #global_size = (len1, len2)
     global_size = tuple([round_up(g, l) for g, l in zip((len1, len2), local_size)])
     print global_size
@@ -158,7 +159,7 @@ if __name__ == '__main__':
     #print host_table.reshape([len2+1,len1+1])
     
     total_time = 0
-    needleman = 3
+    needleman = 2
     if needleman == 1:
         itercount = np.int32(global_size[0] + global_size[1] + 2)
     
