@@ -3,9 +3,9 @@ CS025 Final Project - Parallel Needleman-Wunsch
 
 nw.cl includes the first three parallel implementations:
 
-1. no-block parallel
-2. block-wise parallel, serial within block
-3. block-wise parallel, parallel within block
+0. no-block parallel
+0. block-wise parallel, serial within block
+0. block-wise parallel, parallel within block
 
 * Modify the variable needleman in nw.py to choose which implementation to execute.
 * Set string1 and string2 to specify string inputs.
@@ -18,10 +18,7 @@ To run this program, simply run
 
 >python nw.py
 
-
-nw_co.cl includes the fourth parallel implementation:
-
-4. coalesced block read/write
+nw_co.cl includes the fourth parallel implementation: coalesced block read/write
 
 * Set string1 and string2 to specify string inputs.
 * Set show_progress = True to print out intermediate DP table.
