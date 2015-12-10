@@ -3,9 +3,9 @@ CS025 Final Project - Parallel Needleman-Wunsch
 
 nw.cl includes the first three parallel implementations:
 
-0. Baseline Parallel - No Blocks
-0. Block-wise Parallel - Serial within Blocks
-0. Block-wise Parallel - Parallel within Blocks
+1. Baseline Parallel - No Blocks
+2. Block-wise Parallel - Serial within Blocks
+3. Block-wise Parallel - Parallel within Blocks
 
 * Modify `needleman` in nw.py to choose which implementation to execute.
 * Set `string1` and `string2` to specify string inputs.
