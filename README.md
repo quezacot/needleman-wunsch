@@ -16,7 +16,9 @@ This program will run the serial version once in the end to compare the time con
 
 To run this program, simply run
 
+```python
 >python nw.py
+```
 
 nw_co.cl includes the fourth parallel implementation: coalesced block read/write
 
@@ -28,4 +30,6 @@ This program will run the serial version once in the end to compare the time con
 
 To run this program, simply run
 
->python nw_co.py
+```python
+python nw_co.py
+```
