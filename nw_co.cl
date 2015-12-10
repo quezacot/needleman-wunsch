@@ -1,8 +1,10 @@
+// 2D index to 1D
 inline int to1D(int w, int x, int y)
 {
     return y*w + x;
 }
 
+// cut the outside index to the boundary
 inline int cuttail(int size, int v)
 {
     if( v<0 )
@@ -12,6 +14,7 @@ inline int cuttail(int size, int v)
     return v;
 }
 
+// table initialization for 1D row and column tables
 __kernel void
 initialize_table(__global unsigned int *row_table,
                  __global unsigned int *col_table,
@@ -33,6 +36,7 @@ initialize_table(__global unsigned int *row_table,
     }
 }
 
+// implementation 4: parallel with coalesced read/write
 __kernel void
 needleman_coalesce(__global __read_only char* seq1,
                    __global __read_only char* seq2,
@@ -44,7 +48,7 @@ needleman_coalesce(__global __read_only char* seq1,
                    int buf_w, int buf_h,
                    int edge )
 {
-     // Global position of output pixel
+    // Global position of DP table
     const unsigned int x = get_global_id(0)+edge;
     const unsigned int y = get_global_id(1)+edge;
     
@@ -56,24 +60,25 @@ needleman_coalesce(__global __read_only char* seq1,
     const unsigned int wx = get_group_id(0);
     const unsigned int wy = get_group_id(1);
     
-    // Load the relevant labels to a local buffer with a halo
+    // initialize the 0th row and column in local buffer, identify the workers need to run in this iteration
     if( x < w && y < h && wx + wy == iter ){
         //printf("iter:%u, x:%u, y:%u\n", iter, x, y);
         //printf("iter:%u, wx:%u, wy:%u\n", iter, wx, wy);
-        // load to local buffer
         
-        if( lx == edge ){
+        // load to local buffer
+        if( lx == edge ){ // 0th column of local buffer
             buffer[to1D(buf_w, 0, ly)] = col_table[to1D(h, y, wx)];
         }
-        if( ly == edge ){
+        if( ly == edge ){ // 0th row of local buffer
             buffer[to1D(buf_w, lx, 0)] = row_table[to1D(w, x, wy)];
         }
-        if( lx == edge && ly == edge ){
+        if( lx == edge && ly == edge ){ // cell (0,0) of local buffer
             buffer[to1D(buf_w, 0, 0)] = row_table[to1D(w, x-edge, wy)];
         }
     }
     barrier(CLK_LOCAL_MEM_FENCE);
-        
+    
+    // parallel NW, move forward one anti-diagonal each iteration
     for( int i=2; i < buf_w + buf_h - 1; ++i ){
         if( x < w && y < h && wx + wy == iter && lx + ly == i ){
             //printf("fill %d: iter:%u, lx:%u, ly:%u\n", i, iter, lx, ly);
@@ -89,16 +94,17 @@ needleman_coalesce(__global __read_only char* seq1,
         barrier(CLK_LOCAL_MEM_FENCE);
     }
     
+    // copy back to global buffer
     if( x < w && y < h && wx + wy == iter ){
-        if( lx == buf_w-1 || x == w-1 ){
-            col_table[to1D(h, y, wx+1)] = buffer[to1D(buf_w, lx, ly)];
-            if( ly == edge ){
+        if( lx == buf_w-1 || x == w-1 ){ // copy back to column table
+            col_table[to1D(h, y, wx+1)] = buffer[to1D(buf_w, lx, ly)]; // last column
+            if( ly == edge ){ // first element in the last column
                 col_table[to1D(h, y-1, wx+1)] = buffer[to1D(buf_w, lx, 0)];
             }
         }
-        if( ly == buf_h-1 || y == h-1 ){
-            row_table[to1D(w, x, wy+1)] = buffer[to1D(buf_w, lx, ly)];
-            if( lx == edge ){
+        if( ly == buf_h-1 || y == h-1 ){ // copy back to row table
+            row_table[to1D(w, x, wy+1)] = buffer[to1D(buf_w, lx, ly)]; // last row
+            if( lx == edge ){ // first element in the last row
                 row_table[to1D(w, x-1, wy+1)] = buffer[to1D(buf_w, 0, ly)];
             }
         }        

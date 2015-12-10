@@ -1,8 +1,10 @@
+// 2D index to 1D
 inline int to1D(int w, int x, int y)
 {
     return y*w + x;
 }
 
+// cut the outside index to the boundary
 inline int cuttail(int size, int v)
 {
     if( v<0 )
@@ -12,6 +14,7 @@ inline int cuttail(int size, int v)
     return v;
 }
 
+// table initialization
 __kernel void
 initialize_table(__global unsigned int *table,
                  int w, int h )
@@ -31,6 +34,7 @@ initialize_table(__global unsigned int *table,
     }
 }
 
+// implementation 1: no block parallel
 __kernel void
 needleman_by1(__global __read_only char* seq1,
               __global __read_only char* seq2,
@@ -38,10 +42,10 @@ needleman_by1(__global __read_only char* seq1,
               unsigned int iter,
               int w, int h )
 {
-    // Global position of output pixel
+    // Global position of DP table
     const unsigned int x = get_global_id(0)+1;
     const unsigned int y = get_global_id(1)+1;
-    // Load the relevant labels to a local buffer with a halo
+    // initialize 0th row and 0th column
     if ( x < w && y < h && x + y == iter ) {
         //printf("iter:%u, x:%u, y:%u", iter, x, y);
         unsigned int pre = min( table[to1D(w, x-1, y)] + 1, table[to1D(w, x, y-1)] + 1 );
@@ -51,12 +55,9 @@ needleman_by1(__global __read_only char* seq1,
         }
         table[to1D(w, x, y)] = min( pre, cur );
     }
-
-    // Make sure all threads reach the next part after
-    // the local buffer is loaded
-    //barrier(CLK_LOCAL_MEM_FENCE);
 }
 
+// implementation 2: block-wise parallel, serial within blocks
 __kernel void
 needleman_byblock(__global __read_only char* seq1,
                   __global __read_only char* seq2,
@@ -67,7 +68,7 @@ needleman_byblock(__global __read_only char* seq1,
                   int buf_w, int buf_h,
                   int edge)
 {
-     // Global position of output pixel
+     // Global position of DP table
     const unsigned int x = get_global_id(0)+edge;
     const unsigned int y = get_global_id(1)+edge;
     
@@ -81,7 +82,7 @@ needleman_byblock(__global __read_only char* seq1,
 
     if ( x < w && y < h && lx == edge && ly == edge && wx + wy == iter ) {
         // printf("iter:%u, x:%u, y:%u\n", iter, x, y);
-        // load to local buffer
+        // load to local buffer, use only workers that lx or ly == 0
         for( int i=0; i<buf_w && x+i-edge<w; ++i ){
             buffer[to1D(buf_w, i, 0)] = table[to1D(w, x+i-edge, y-edge)];
         }
@@ -93,12 +94,8 @@ needleman_byblock(__global __read_only char* seq1,
         for( int j=edge; j<buf_h && y+j-edge<h; ++j ){
             for( int i=edge; i<buf_w && x+i-edge<w; ++i ){
                 //printf("u:%u, l:%u\n", x-1+i-edge, y-1+j-edge);
-                //printf("u:%c, l:%c\n", seq1[x-1+i-edge], seq2[y-1+j-edge]);
-                //printf("take min, l:%u, u:%u\n", buffer[to1D(buf_w, i-1, j)], buffer[to1D(buf_w, i, j-1)] );
                 buffer[to1D(buf_w, i, j)] = min( buffer[to1D(buf_w, i-1, j)]+1, buffer[to1D(buf_w, i, j-1)]+1 );
-                //printf("temp min: %u\n", buffer[to1D(buf_w, i, j)]);
                 int cur = buffer[to1D(buf_w, i-1, j-1)];
-                //printf("lu: %u\n", cur);
                 if( seq1[x-1+i-edge] != seq2[y-1+j-edge] ){
                     ++cur;
                 }
@@ -116,12 +113,9 @@ needleman_byblock(__global __read_only char* seq1,
 
     }
     barrier(CLK_LOCAL_MEM_FENCE);
-
-    // Make sure all threads reach the next part after
-    // the local buffer is loaded
-    //barrier(CLK_LOCAL_MEM_FENCE);
 }
 
+// implementation 3: block-wise parallel, parallel within blocks
 __kernel void
 needleman_byblockworker(__global __read_only char* seq1,
                         __global __read_only char* seq2,
@@ -132,7 +126,7 @@ needleman_byblockworker(__global __read_only char* seq1,
                         int buf_w, int buf_h,
                         int edge)
 {
-     // Global position of output pixel
+     // Global position of DP table
     const unsigned int x = get_global_id(0)+edge;
     const unsigned int y = get_global_id(1)+edge;
     
@@ -144,34 +138,25 @@ needleman_byblockworker(__global __read_only char* seq1,
     const unsigned int wx = get_group_id(0);
     const unsigned int wy = get_group_id(1);
     
-    // Load the relevant labels to a local buffer with a halo
+    // initialize the 0th row and column in local buffer, identify the workers need to run in this iteration
     if( x < w && y < h && wx + wy == iter ){
-    //if( x > 0 && y > 0 && x < w && y < h && x%(buf_w-edge) == 1 && y%(buf_h-edge) == 1 && wx + wy == iter ){
         //printf("iter:%u, x:%u, y:%u\n", iter, x, y);
         //printf("iter:%u, wx:%u, wy:%u\n", iter, wx, wy);
-        // load to local buffer
         
-        if( lx == edge ){
-            //if (wx==1 && wy==0) printf("iter:%u, x:%u, y:%u\n", iter, x, y+edge);
-            
+        // load to local buffer
+        if( lx == edge ){ // 0th column of local buffer
             buffer[to1D(buf_w, 0, ly)] = table[to1D(w, x-edge, y)];
-            //if (wx==1 && wy==0) printf("initial: iter:%u, x:%u, y:%u, lx:%u, ly:%u value:%d\n", iter, x-edge, y, lx, ly, buffer[to1D(buf_w, 0, ly)]);
         }
-        if( ly == edge ){
-            //if (wx==1 && wy==0) printf("iter:%u, x:%u, y:%u\n", iter, x+edge, y);
-            
+        if( ly == edge ){ // 0th row of local buffer
             buffer[to1D(buf_w, lx, 0)] = table[to1D(w, x, y-edge)];
-            //if (wx==1 && wy==0) printf("initial: iter:%u, x:%u, y:%u, lx:%u, ly:%u, value:%d\n", iter, x, y-edge, lx, ly, buffer[to1D(buf_w, lx, 0)]);
         }
-        if( lx == edge && ly == edge ){
-            //if (wx==1 && wy==0) printf("iter:%u, x:%u, y:%u\n", iter, x+edge-(buf_w-edge), y+edge-(buf_h-edge));
-            
+        if( lx == edge && ly == edge ){ // cell (0,0) of local buffer
             buffer[to1D(buf_w, 0, 0)] = table[to1D(w, x-edge, y-edge)];
-            //if (wx==1 && wy==0) printf("initial: iter:%u, x:%u, y:%u, lx:%u, ly:%u, value:%d\n", iter, x-(buf_w-edge), y-(buf_h-edge), lx, ly, buffer[to1D(buf_w, 0, 0)]);
         }
     }
     barrier(CLK_LOCAL_MEM_FENCE);
-        
+     
+    // parallel NW, move forward one anti-diagonal each iteration
     for( int i=2; i < buf_w + buf_h - 1; ++i ){
         if( x < w && y < h && wx + wy == iter && lx + ly == i ){
             //printf("fill %d: iter:%u, lx:%u, ly:%u\n", i, iter, lx, ly);
@@ -187,12 +172,9 @@ needleman_byblockworker(__global __read_only char* seq1,
         barrier(CLK_LOCAL_MEM_FENCE);
     }
     
+    // copy back to global buffer
     if( x < w && y < h && wx + wy == iter ){
         table[to1D(w, x, y)] = buffer[to1D(buf_w, lx, ly)];
     }
     barrier(CLK_LOCAL_MEM_FENCE);
-
-    // Make sure all threads reach the next part after
-    // the local buffer is loaded
-    //barrier(CLK_LOCAL_MEM_FENCE);
 }

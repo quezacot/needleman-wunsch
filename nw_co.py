@@ -8,6 +8,7 @@ import string
 import time
 
 # Edit distance = 1 for insertion, deletion, and replacement
+# Serial version
 def edit_distance(strA, strB):
     lenA, lenB = len(strA), len(strB)
     if strA and strB:
@@ -28,6 +29,7 @@ def edit_distance(strA, strB):
     else:
         return max(lenA, lenB)
 
+# round up the global size to make sure it is dividable
 def round_up(global_size, group_size):
     r = global_size % group_size
     if r == 0:
@@ -67,7 +69,7 @@ if __name__ == '__main__':
     print 'The queue is using the device:', queue.device.name
 
     program = cl.Program(context, open('nw_co.cl').read()).build(options='')
-
+    # different size of strings to test DNA sequences
     # string1 = "CAGCATATACGCGCTCGCCCGCCGCCGCTGGCTCGCTAAGGGTACGCTTGCCTGAGCCTC \
                 # TGCCAATGTCGCCTGTTCATTGGGAAGGCGGAGGTAACGTGCGCAGTCCGCGTAGCTGCC \
                 # AGAGTCTTCATGGAGGAGGTTGAGCGCAGCGGGCCACAAGTACCCGGGGCGGCCCGGGGG \
@@ -125,11 +127,13 @@ if __name__ == '__main__':
     cl.enqueue_copy(queue, gpu_seq2_buff, seq2, is_blocking=False)
     queue.finish()
     
-    local_size = (31, 31)
+    # set different local size to test, this number also specifies the number of workers.
+    local_size = (32, 32)
     global_size = tuple([round_up(g, l) for g, l in zip((len1, len2), local_size)])
     print global_size
     print local_size
     
+    # two partial DP tables: row and column are both stored in 1D array in order to coalesced read/write
     row_table = np.zeros( (len1+1)*(global_size[1]/local_size[1]+1), dtype=np.uint32)
     col_table = np.zeros( (global_size[0]/local_size[0]+1)*(len2+1), dtype=np.uint32)
     row_dptable = cl.Buffer(context, cl.mem_flags.READ_WRITE, row_table.size *4)
@@ -148,8 +152,7 @@ if __name__ == '__main__':
     program.initialize_table(queue, global_size, local_size,
                              row_dptable, col_dptable, width, height)
 
-    # while not done, propagate labels
-    #itercount = np.int32(math.ceil((len1-1.0)/(buf_size[0]-1.0)) + math.ceil((len2-1.0)/(buf_size[1]-1.0)))
+    # count number of blocks, it determines how many parallel block we can have.
     itercount = np.int32(global_size[0]/local_size[0] + global_size[1]/local_size[1])
     show_progress = False
 
@@ -163,8 +166,6 @@ if __name__ == '__main__':
     total_time = 0
 
     for itr in xrange(itercount):
-        #host_done_flag[0] = 0
-        #cl.enqueue_copy(queue, gpu_done_flag, host_done_flag, is_blocking=False)
         prop_exec = program.needleman_coalesce(queue, global_size, local_size,
                                                gpu_seq1_buff, gpu_seq2_buff,
                                                row_dptable,
@@ -184,7 +185,6 @@ if __name__ == '__main__':
             print row_table.reshape([-1,len1+1])
             print col_table.reshape([-1,len2+1])
 
-        #break
     # Show final result
     cl.enqueue_copy(queue, row_table, row_dptable, is_blocking=True)
     cl.enqueue_copy(queue, col_table, col_dptable, is_blocking=True)
